@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-
-
 import time
 start_time = time.time()
 
@@ -44,10 +42,6 @@ import xlsxwriter
 import json
 
 welcome_derto.welcome_user_anfia()
-
-print("Prova prova")
-def prova(prova):
-    pass
 
 def move_window_to_primary_monitor(window):
     """
@@ -143,7 +137,7 @@ def load_dict_from_json(json_path):
         return json.load(json_file)
 
 
-def verify_df_pairs(df, json_path, make_col="MARCA", model_col="MODELLO"):
+def verify_df_pairs(df, make_col="MARCA", model_col="MODELLO"):
     """
     Useful function to automatically correct known database errors that are still not resolved, and also to discover
     new errors. There is a .json file that is used to check each pair found in the dataframe against the .json file
@@ -167,50 +161,61 @@ def verify_df_pairs(df, json_path, make_col="MARCA", model_col="MODELLO"):
         Returns the corrected dataframe that will then be converted into csv.
 
     """
-
-    template_dict = load_dict_from_json(json_path)
-    corrections = {
-        ('PEUGEOT', 'JUMPER'): ('PEUGEOT', 'BOXER'),
-        ('CITROEN', 'BOXER'): ('CITROEN', 'JUMPER'),
-        ('CITROEN', 'DOBLÒ'): ('CITROEN', 'JUMPER'),
-        ('RENAULT', 'SPRINTER'): ('RENAULT', 'MASTER'),
-        ('FIAT', 'BERLINGO'): ('FIAT', 'DOBLÒ'),
-        ('DS', 'ND'): ('DS', 'DS7')
-    }
-
-    corrected_pairs = []
-    incorrect_pairs = []
-    declared_pairs = set()
+    user_input = ""
+    while user_input.casefold() != 'skip':
+        if os.path.exists(r"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\template_make_model.json"):
+            json_path = r"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\template_make_model.json"
+        elif not os.path.exists(r"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\template_make_model.json"):
+            json_path = (os.getcwd())+r"\template_make_model.json"
+        else:
+            print("Attenzione: file dizionario non trovato. Inserisci il percorso del file dizionario o scrivi 'Skip' per saltare l'operazione.")
+            user_input = input("Inserisci qui il percorso: ")
+            json_path = user_input
+        
+        template_dict = load_dict_from_json(json_path)
+        corrections = {
+            ('PEUGEOT', 'JUMPER'): ('PEUGEOT', 'BOXER'),
+            ('CITROEN', 'BOXER'): ('CITROEN', 'JUMPER'),
+            ('CITROEN', 'DOBLÒ'): ('CITROEN', 'JUMPER'),
+            ('RENAULT', 'SPRINTER'): ('RENAULT', 'MASTER'),
+            ('FIAT', 'BERLINGO'): ('FIAT', 'DOBLÒ'),
+            ('DS', 'ND'): ('DS', 'DS7')
+        }
     
-    for idx, row in df.iterrows():
-        make, model = row[make_col], row[model_col]
-        if pd.notna(make) and pd.notna(model):
-            # Autocorrect if pair is in corrections list
-            if (make, model) in corrections:
-                corrected_make, corrected_model = corrections[(make, model)]
-                df.at[idx, make_col] = corrected_make  # Aggiorna il DataFrame
-                df.at[idx, model_col] = corrected_model
-                corrected_pairs.append((idx, make, model, corrected_make, corrected_model))
-            # Only save and later show pairs that are not in the dictionary or in corrections.
-            elif make not in template_dict or model not in template_dict[make]:
-                incorrect_pairs.append((idx, make, model))
-
-
-    if corrected_pairs:
-        print("Correzioni applicate:")
-    for (row_idx, old_make, old_model, new_make, new_model) in corrected_pairs:
-        print(f"Riga {row_idx}: '{old_make} {old_model}' → '{new_make} {new_model}'")
-            
-    if incorrect_pairs:
-        for row_idx, make, model in incorrect_pairs:
-            if (make, model) not in declared_pairs:
-                print(f"Marca '{make}' - Modello '{model}' non è corretto.")
-                declared_pairs.add((make,model))
-        print(declared_pairs)
+        corrected_pairs = []
+        incorrect_pairs = []
+        declared_pairs = set()
+        
+        for idx, row in df.iterrows():
+            make, model = row[make_col], row[model_col]
+            if pd.notna(make) and pd.notna(model):
+                # Autocorrect if pair is in corrections list
+                if (make, model) in corrections:
+                    corrected_make, corrected_model = corrections[(make, model)]
+                    df.at[idx, make_col] = corrected_make  # Aggiorna il DataFrame
+                    df.at[idx, model_col] = corrected_model
+                    corrected_pairs.append((idx, make, model, corrected_make, corrected_model))
+                # Only save and later show pairs that are not in the dictionary or in corrections.
+                elif make not in template_dict or model not in template_dict[make]:
+                    incorrect_pairs.append((idx, make, model))
+    
+    
+        if corrected_pairs:
+            print("Correzioni applicate:")
+        for (row_idx, old_make, old_model, new_make, new_model) in corrected_pairs:
+            print(f"Riga {row_idx}: '{old_make} {old_model}' → '{new_make} {new_model}'")
+                
+        if incorrect_pairs:
+            for row_idx, make, model in incorrect_pairs:
+                if (make, model) not in declared_pairs:
+                    print(f"Marca '{make}' - Modello '{model}' non è corretto.")
+                    declared_pairs.add((make,model))
+            print(declared_pairs)
+        else:
+            print("Tutte le coppie Marca-Modello sono corrette.")
+        return df
     else:
-        print("Tutte le coppie Marca-Modello sono corrette.")
-    return df
-
+        return None
 
 
 query_hy1 = """
@@ -477,6 +482,8 @@ AND omm.codDirettivaCee IS NOT NULL
 AND omm.codice_omologazione IS NOT NULL
 """
 
+# Possible new filters for a new ETL rule about new and used vehicles:
+#
 # AND codDirettivaCee IS NOT NULL AND IS IN ['EURO6D', 'EURO6E', 'EURO6C', 'EURO6B', 'EURO6A', 'EURO6', 'EURO0']
 # CASE WHEN anno_prima_immatricolazione IS NULL OR anno_prima_immatricolazione = anno_immatricolazione THEN flNuovo = 1 END
 
@@ -534,13 +541,13 @@ try:
         # Save as CSV and then convert to .xlsx to maximise performance
         output_folder = r"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day"
         if not hy1.empty:
-            verify_df_pairs(hy1, r"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\template_make_model.json")
+            verify_df_pairs(hy1)
             hy1.to_csv(f"{current_year}_HY1.csv", index=False, encoding='utf-8')
             convert_csv_to_xlsx(f"{current_year}_HY1.csv", f"{current_year}_HY1.xlsx", output_folder)
 
         if not hy2.empty:
             hy2_filename = f"{previous_year}_HY2.xlsx" if current_month in [1, 2, 3] else f"{current_year}_HY2.xlsx"
-            hy2 = verify_df_pairs(hy2, r"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\template_make_model.json")
+            hy2 = verify_df_pairs(hy2)
             hy2.to_csv(f"{previous_year}_HY2.csv" if current_month in [1, 2, 3] else f"{current_year}_HY2.csv", index=False, encoding='utf-8')            
             convert_csv_to_xlsx(f"{previous_year}_HY2.csv" if current_month in [1, 2, 3] else f"{current_year}_HY2.csv", hy2_filename, output_folder)
 
