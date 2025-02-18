@@ -552,6 +552,3 @@ except OperationalError as e:
 end_time = time.time()
 elapsed_time = end_time - start_time
 print(f"Tempo totale: {elapsed_time:.2f} secondi ({elapsed_time / 60:.2f} minuti). Brum brum!")
-
-prova = 1
-prova = 2
