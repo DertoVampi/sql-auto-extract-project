@@ -45,6 +45,10 @@ import json
 
 welcome_derto.welcome_user_anfia()
 
+print("Prova prova")
+def prova(prova):
+    pass
+
 def move_window_to_primary_monitor(window):
     """
     Focus window and avoid writing passwords all over the place.
@@ -548,4 +552,3 @@ except OperationalError as e:
 end_time = time.time()
 elapsed_time = end_time - start_time
 print(f"Tempo totale: {elapsed_time:.2f} secondi ({elapsed_time / 60:.2f} minuti). Brum brum!")
-
