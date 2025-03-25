@@ -9,16 +9,22 @@ import sys
 import subprocess
 
 # Install packages if missing, useful with pyinstaller and making .exes
-required_packages = ["azure-identity", "sqlalchemy", "pyodbc", "pandas", "pywinauto", "xlsxwriter"]
+required_packages = ["azure.identity", "sqlalchemy", "pyodbc", "pandas", "pywinauto", "xlsxwriter", "welcome_derto"]
 
 def install_missing_packages(packages):
     for package in packages:
         try:
-            __import__(package.replace("-", "_"))
+            __import__(package)
+            print(f"Pacchetto '{package}' già installato.")
         except ImportError:
             print(f"Pacchetto '{package}' non trovato. Installazione in corso...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-            print(f"'{package}' installato.")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+                print(f"'{package}' installato.")
+            except subprocess.CalledProcessError as e:
+                print(f"Errore durante l'installazione di '{package}': {e}")
+            except Exception as e:
+                print(f"Errore inaspettato durante l'installazione di '{package}': {e}")
 
 install_missing_packages(required_packages)
 
@@ -47,7 +53,6 @@ def move_window_to_primary_monitor(window):
     """
     Focus window and avoid writing passwords all over the place.
     """
-    rect = window.rectangle()
     window.move_window(x=0, y=0)
 
 def get_login_info_from_config(): # Get login info from config or create one.
@@ -55,15 +60,21 @@ def get_login_info_from_config(): # Get login info from config or create one.
     if not os.path.exists(config_file):
         user = input("Inserisci la tua mail di Microsoft: ")
         password = input("Inserisci la tua password: ")
+        server = input("Inserisci il nome del server (es. sql-tuazienda-prod...): ")
+        database = input("Inserisci il nome del database a cui accedere (es. BuyAnalysis...): ")
         with open(config_file, 'w') as file:
             file.write(user + "\n")
-            file.write(password)
+            file.write(password + "\n")
+            file.write(server + "\n")
+            file.write(database)
         print(f"User e password salvati nel file {config_file}.")
     else:
         with open(config_file, 'r') as file:
             user = file.readline().strip()
             password = file.readline().strip()
-    return user, password
+            server = file.readline().strip()
+            database = file.readline().strip()
+    return user, password, server, database
 
 def simulate_user_login(user, password):
     """
@@ -217,8 +228,15 @@ def verify_df_pairs(df, make_col="MARCA", model_col="MODELLO"):
     else:
         return None
 
+current_month = dt.date.today().month
+current_year = dt.date.today().year
+previous_year = dt.date.today().year - 1
+
 
 query_hy1 = """
+DECLARE @start_date AS DATE = DATEFROMPARTS(YEAR(GETDATE()),1,1)
+DECLARE @end_date AS DATE = DATEFROMPARTS(YEAR(GETDATE()),7,1)
+
 SELECT 
     CASE WHEN Mercato.desMercato = 'Autovetture' THEN 'PC' 
          WHEN Mercato.desMercato = 'Veicoli Commerciali Leggeri' THEN 'LCV'
@@ -297,16 +315,18 @@ LEFT JOIN dbo.TipoCambio Cambio ON Cambio.codCambio = omm.codTipoCambio
 LEFT JOIN dbo.TargheAutoAnnullateReporting AnnullamentiReporting ON AnnullamentiReporting.immatricolazioniId = imm.immatricolazioniId
 LEFT JOIN dbo.SegmentoLCV LCV ON LCV.idSegmentoLCV = Modello.idSegmentoLCV
 LEFT JOIN dbo.DirettivaCee CEE ON CEE.codDirettivaCee = omm.codDirettivaCee
-WHERE YEAR(data_immatricolazione_del_veicolo) = YEAR(GETDATE())
-AND MONTH(data_immatricolazione_del_veicolo) BETWEEN 1 AND 6
+WHERE imm.data_immatricolazione_del_veicolo >= @start_date
+AND imm.data_immatricolazione_del_veicolo < @end_date
 AND imm.numero_targa IS NOT NULL
 AND CASE WHEN AnnullamentiReporting.immatricolazioniId IS NOT NULL and flannullato = 1 THEN 0 ELSE flannullato END = 0
 AND imm.flNuovo = 1
-AND omm.codDirettivaCee IS NOT NULL
 AND omm.codice_omologazione IS NOT NULL
 """
 
 query_hy2 = """
+DECLARE @start_date AS DATE = DATEFROMPARTS(YEAR(GETDATE()),7,1)
+DECLARE @end_date AS DATE = DATEFROMPARTS(YEAR(GETDATE())+1,1,1)
+
 SELECT 
     CASE WHEN Mercato.desMercato = 'Autovetture' THEN 'PC' 
          WHEN Mercato.desMercato = 'Veicoli Commerciali Leggeri' THEN 'LCV'
@@ -385,16 +405,18 @@ LEFT JOIN dbo.TipoCambio Cambio ON Cambio.codCambio = omm.codTipoCambio
 LEFT JOIN dbo.TargheAutoAnnullateReporting AnnullamentiReporting ON AnnullamentiReporting.immatricolazioniId = imm.immatricolazioniId
 LEFT JOIN dbo.SegmentoLCV LCV ON LCV.idSegmentoLCV = Modello.idSegmentoLCV
 LEFT JOIN dbo.DirettivaCee CEE ON CEE.codDirettivaCee = omm.codDirettivaCee
-WHERE YEAR(data_immatricolazione_del_veicolo) = YEAR(GETDATE())
-AND MONTH(data_immatricolazione_del_veicolo) BETWEEN 7 AND 12
+WHERE imm.data_immatricolazione_del_veicolo >= @start_date
+AND imm.data_immatricolazione_del_veicolo < @end_date
 AND imm.numero_targa IS NOT NULL
 AND CASE WHEN AnnullamentiReporting.immatricolazioniId IS NOT NULL and flannullato = 1 THEN 0 ELSE flannullato END = 0
 AND imm.flNuovo = 1
-AND omm.codDirettivaCee IS NOT NULL
 AND omm.codice_omologazione IS NOT NULL
 """
 
 query_hy2_previous_year = """
+DECLARE @start_date AS DATE = DATEFROMPARTS(YEAR(GETDATE())-1,7,1)
+DECLARE @end_date AS DATE = DATEFROMPARTS(YEAR(GETDATE()),1,1)
+
 SELECT 
     CASE WHEN Mercato.desMercato = 'Autovetture' THEN 'PC' 
          WHEN Mercato.desMercato = 'Veicoli Commerciali Leggeri' THEN 'LCV'
@@ -473,12 +495,11 @@ LEFT JOIN dbo.TipoCambio Cambio ON Cambio.codCambio = omm.codTipoCambio
 LEFT JOIN dbo.TargheAutoAnnullateReporting AnnullamentiReporting ON AnnullamentiReporting.immatricolazioniId = imm.immatricolazioniId
 LEFT JOIN dbo.SegmentoLCV LCV ON LCV.idSegmentoLCV = Modello.idSegmentoLCV
 LEFT JOIN dbo.DirettivaCee CEE ON CEE.codDirettivaCee = omm.codDirettivaCee
-WHERE YEAR(data_immatricolazione_del_veicolo) = YEAR(GETDATE()) - 1 
-AND MONTH(data_immatricolazione_del_veicolo) BETWEEN 7 AND 12
+WHERE imm.data_immatricolazione_del_veicolo >= @start_date
+AND imm.data_immatricolazione_del_veicolo < @end_date
 AND imm.numero_targa IS NOT NULL
 AND CASE WHEN AnnullamentiReporting.immatricolazioniId IS NOT NULL and flannullato = 1 THEN 0 ELSE flannullato END = 0
 AND imm.flNuovo = 1 
-AND omm.codDirettivaCee IS NOT NULL
 AND omm.codice_omologazione IS NOT NULL
 """
 
@@ -489,13 +510,12 @@ AND omm.codice_omologazione IS NOT NULL
 
 # Date variables to properly select the correct queries
 
-current_month = dt.date.today().month
-current_year = dt.date.today().year
-previous_year = dt.date.today().year - 1
+
 
 # Connection data
-SERVER = 'sql-anfia-bi-prod.database.windows.net'
-DATABASE = 'DealerAnalysis'
+user, password, server, database = get_login_info_from_config()
+SERVER = server
+DATABASE = database
 
 connection_string = (
     "mssql+pyodbc:///?odbc_connect="
@@ -511,7 +531,6 @@ connection_string = (
 # Extract correct data based on current date: if current month is 1 or 2, then data from previous year
 # must still be updated.
 try:
-    user, password = get_login_info_from_config()
     auth_thread = Thread(target=simulate_user_login, args=(user, password))
     auth_thread.start()
 

@@ -1,0 +1,4 @@
+c.dimartino@anfiait.onmicrosoft.com
+A1029384756b!
+sql-anfia-bi-prod.database.windows.net
+DealerAnalysis
