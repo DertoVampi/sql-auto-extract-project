@@ -9,7 +9,7 @@ import sys
 import subprocess
 
 # Install packages if missing, useful with pyinstaller and making .exes
-required_packages = ["azure.identity", "sqlalchemy", "pyodbc", "pandas", "pywinauto", "xlsxwriter", "welcome_derto"]
+required_packages = ["azure.identity", "sqlalchemy", "pyodbc", "pandas", "ftplib", "pywinauto", "xlsxwriter", "welcome_derto"]
 
 def install_missing_packages(packages):
     for package in packages:
@@ -46,6 +46,7 @@ import datetime as dt
 from sqlalchemy.exc import OperationalError
 import xlsxwriter
 import json
+import ftplib
 
 welcome_derto.welcome_user_anfia()
 
@@ -55,26 +56,55 @@ def move_window_to_primary_monitor(window):
     """
     window.move_window(x=0, y=0)
 
+def login_row(lines, lookup_string):
+    for line in lines:
+        if lookup_string in line:
+            target_line = line.strip()
+            break
+    else:
+        return None
+    cleaned_line = target_line.strip().split(" ")[1]
+    return cleaned_line
+
 def get_login_info_from_config(): # Get login info from config or create one.
     config_file = "config.txt"
-    if not os.path.exists(config_file):
-        user = input("Inserisci la tua mail di Microsoft: ")
-        password = input("Inserisci la tua password: ")
-        server = input("Inserisci il nome del server (es. sql-tuazienda-prod...): ")
-        database = input("Inserisci il nome del database a cui accedere (es. BuyAnalysis...): ")
-        with open(config_file, 'w') as file:
-            file.write(user + "\n")
-            file.write(password + "\n")
-            file.write(server + "\n")
-            file.write(database)
-        print(f"User e password salvati nel file {config_file}.")
-    else:
-        with open(config_file, 'r') as file:
-            user = file.readline().strip()
-            password = file.readline().strip()
-            server = file.readline().strip()
-            database = file.readline().strip()
-    return user, password, server, database
+    rebuild = False
+    while True:
+        if rebuild:
+            os.remove(config_file)
+        rebuild = False
+        if not os.path.exists(config_file):
+            username = input("Inserisci la tua mail di Microsoft: ")
+            password = input("Inserisci la tua password: ")
+            server = input("Inserisci il nome del server (es. sql-tuazienda-prod...): ")
+            database = input("Inserisci il nome del database a cui accedere (es. BuyAnalysis...): ")
+            ftp_server_address = input("Inserisci l'indirizzo del server FTP: ")
+            ftp_user = input("Inserisci il nome utente per il server FTP: ")
+            ftp_password = input("Inserisci la password per il server FTP: ")
+            with open(config_file, 'w') as file:
+                file.write("username: "+ username + "\n")
+                file.write("password: "+ password + "\n")
+                file.write("server: "+ server + "\n")
+                file.write("database: "+ database + "\n")
+                file.write("ftp_server_address: "+ ftp_server_address + "\n")
+                file.write("ftp_user: "+ ftp_user + "\n")
+                file.write("ftp_password: "+ ftp_password)
+            print(f"User e password salvati nel file {config_file}.")
+        else:
+            with open(config_file, 'r') as file:
+                lines = file.readlines()
+                if len(lines) != 7:
+                    print("Attenzione: il file di configurazione non è corretto. Reinserisci i tuoi dati.")
+                    rebuild = True
+                    continue
+                username = login_row(lines, "username:").strip()
+                password = login_row(lines, "password:").strip()
+                server = login_row(lines, "server:").strip()
+                database = login_row(lines, "database:").strip()
+                ftp_server_address = login_row(lines, "ftp_server_address:").strip()
+                ftp_user = login_row(lines, "ftp_user:").strip()
+                ftp_password = login_row(lines, "ftp_password:").strip()
+                return username, password, server, database, ftp_server_address, ftp_user, ftp_password
 
 def simulate_user_login(user, password):
     """
@@ -91,12 +121,10 @@ def simulate_user_login(user, password):
         dlg = app
         dlg.set_focus()
         move_window_to_primary_monitor(dlg)
-        time.sleep(1.5)
-
+        time.sleep(3)
         send_keys(user)
         send_keys('{ENTER}{TAB}{ENTER}', with_spaces=True)
 
-        time.sleep(2)
         if dlg.wait('ready', timeout=10):
             send_keys(password)
             send_keys('{ENTER}') 
@@ -145,7 +173,12 @@ def convert_csv_to_xlsx(csv_file, xlsx_file, output_folder):
 
 def load_dict_from_json(json_path):
     with open(json_path, "r", encoding="utf-8") as json_file:
-        return json.load(json_file)
+        try:
+            correct_json = json.load(json_file)
+        except json.JSONDecodeError as e:
+            print(e)
+            correct_json = None
+        return correct_json
 
 
 def verify_df_pairs(df, make_col="MARCA", model_col="MODELLO"):
@@ -184,6 +217,9 @@ def verify_df_pairs(df, make_col="MARCA", model_col="MODELLO"):
             json_path = user_input
         
         template_dict = load_dict_from_json(json_path)
+        if not template_dict:
+            print("Json non corretto. Revisionare gli errori.")
+            return None
         corrections = {
             ('PEUGEOT', 'JUMPER'): ('PEUGEOT', 'BOXER'),
             ('CITROEN', 'BOXER'): ('CITROEN', 'JUMPER'),
@@ -513,7 +549,7 @@ AND omm.codice_omologazione IS NOT NULL
 
 
 # Connection data
-user, password, server, database = get_login_info_from_config()
+user, password, server, database, ftp_server_address, ftp_user, ftp_password = get_login_info_from_config()
 SERVER = server
 DATABASE = database
 
@@ -527,6 +563,8 @@ connection_string = (
     )
 )
 
+# ftp = ftplib.FTP(ftp_server_address)
+# ftp.login(ftp_user, ftp_password)
 
 # Extract correct data based on current date: if current month is 1 or 2, then data from previous year
 # must still be updated.
@@ -563,17 +601,23 @@ try:
             verify_df_pairs(hy1)
             hy1.to_csv(f"{current_year}_HY1.csv", index=False, encoding='utf-8')
             convert_csv_to_xlsx(f"{current_year}_HY1.csv", f"{current_year}_HY1.xlsx", output_folder)
-
+            # file_hy1 = fr"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\{current_year}_HY1.xlsx"
+            # with open(file_hy1, "rb") as file:
+            #     ftp.storbinary(f"STOR {file_hy1}", file)
         if not hy2.empty:
             hy2_filename = f"{previous_year}_HY2.xlsx" if current_month in [1, 2, 3] else f"{current_year}_HY2.xlsx"
             hy2 = verify_df_pairs(hy2)
             hy2.to_csv(f"{previous_year}_HY2.csv" if current_month in [1, 2, 3] else f"{current_year}_HY2.csv", index=False, encoding='utf-8')            
             convert_csv_to_xlsx(f"{previous_year}_HY2.csv" if current_month in [1, 2, 3] else f"{current_year}_HY2.csv", hy2_filename, output_folder)
+            # file_hy2 = fr"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\{previous_year}_HY2.xlsx" if current_month in [1, 2, 3] else fr"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\{current_year}_HY2.xlsx"
+            # with open(file_hy2, "rb") as file:
+            #     ftp.storbinary(f"STOR {file_hy2}", file)
+
 
 except OperationalError as e:
     print("Errore di connessione:", e)
 
-
+# ftp.quit()
 
 end_time = time.time()
 elapsed_time = end_time - start_time
