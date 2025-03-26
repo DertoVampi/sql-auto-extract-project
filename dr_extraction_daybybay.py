@@ -43,7 +43,7 @@ from threading import Thread
 from pywinauto import Desktop
 from pywinauto.keyboard import send_keys
 import datetime as dt
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, DBAPIError
 import xlsxwriter
 import json
 import ftplib
@@ -569,6 +569,7 @@ connection_string = (
 # Extract correct data based on current date: if current month is 1 or 2, then data from previous year
 # must still be updated.
 try:
+    user = "c.piperino@almeno.it"
     auth_thread = Thread(target=simulate_user_login, args=(user, password))
     auth_thread.start()
 
@@ -613,9 +614,15 @@ try:
             # with open(file_hy2, "rb") as file:
             #     ftp.storbinary(f"STOR {file_hy2}", file)
 
-
-except OperationalError as e:
-    print("Errore di connessione:", e)
+except DBAPIError as e:
+    user_input = "a"
+    while user_input.casefold() not in ["y", "n"]:
+        user_input = input("C'è stato un errore nel login. Vuoi ricreare il file config.txt? y/n")
+    if user_input.casefold == "y": 
+        os.remove("config.txt")
+    else:
+        print(e)
+    
 
 # ftp.quit()
 
