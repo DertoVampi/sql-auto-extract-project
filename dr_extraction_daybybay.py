@@ -9,7 +9,7 @@ import sys
 import subprocess
 
 # Install packages if missing, useful with pyinstaller and making .exes
-required_packages = ["azure.identity", "sqlalchemy", "pyodbc", "pandas", "ftplib", "pywinauto", "xlsxwriter", "welcome_derto"]
+required_packages = ["loginserviceanfia","azure.identity", "pandas","threading","sqlalchemy", "pyodbc", "pandas", "ftplib", "pywinauto", "xlsxwriter", "welcome_derto"]
 
 def install_missing_packages(packages):
     for package in packages:
@@ -29,11 +29,12 @@ def install_missing_packages(packages):
 install_missing_packages(required_packages)
 
 
+import loginserviceanfia as als
 import welcome_derto # Simple welcome function, first try at uploading a module to PyPi
-import azure.identity
+# import azure.identity
 import pyodbc
 assert pyodbc
-assert azure.identity
+# assert azure.identity
 from sqlalchemy import create_engine, text
 import pandas as pd
 import shutil
@@ -124,6 +125,7 @@ def simulate_user_login(user, password):
         time.sleep(3)
         send_keys(user)
         send_keys('{ENTER}{TAB}{ENTER}', with_spaces=True)
+        time.sleep(2)
 
         if dlg.wait('ready', timeout=10):
             send_keys(password)
@@ -135,7 +137,7 @@ def simulate_user_login(user, password):
         
     except Exception as e:
         print(f"Errore durante la simulazione del login: {e}. Il login è stato effettuato? Allora non preoccuparti, questo messaggio è normale.")
-
+        print(f"Errore di tipo: {type(e).__name__}")
 def convert_csv_to_xlsx(csv_file, xlsx_file, output_folder): 
     """
     This function transforms the .csv, resulting from the SQLalchemy query, into an .xlsx 
@@ -549,7 +551,7 @@ AND omm.codice_omologazione IS NOT NULL
 
 
 # Connection data
-user, password, server, database, ftp_server_address, ftp_user, ftp_password = get_login_info_from_config()
+user, password, server, database, *rest = als.get_login_info_from_config()
 SERVER = server
 DATABASE = database
 
@@ -569,8 +571,7 @@ connection_string = (
 # Extract correct data based on current date: if current month is 1 or 2, then data from previous year
 # must still be updated.
 try:
-    user = "c.piperino@almeno.it"
-    auth_thread = Thread(target=simulate_user_login, args=(user, password))
+    auth_thread = Thread(target=als.simulate_user_login, args=(user, password))
     auth_thread.start()
 
     engine = create_engine(connection_string)
@@ -616,12 +617,12 @@ try:
 
 except DBAPIError as e:
     user_input = "a"
-    while user_input.casefold() not in ["y", "n"]:
-        user_input = input("C'è stato un errore nel login. Vuoi ricreare il file config.txt? y/n")
-    if user_input.casefold == "y": 
-        os.remove("config.txt")
-    else:
-        print(e)
+    # while user_input.casefold() not in ["y", "n"]:
+    #     user_input = input("C'è stato un errore nel login. Vuoi ricreare il file config.txt? y/n")
+    # if user_input.casefold == "y": 
+    #     os.remove("config.txt")
+    # else:
+    #     print(e)
     
 
 # ftp.quit()
