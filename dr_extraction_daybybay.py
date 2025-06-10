@@ -3,13 +3,10 @@
 
 import time
 start_time = time.time()
-
-
 import sys
 import subprocess
-
 # Install packages if missing, useful with pyinstaller and making .exes
-required_packages = ["loginserviceanfia","azure.identity", "pandas","threading","sqlalchemy", "pyodbc", "pandas", "ftplib", "pywinauto", "xlsxwriter", "welcome_derto"]
+required_packages = ["loginserviceanfia","azure.identity", "pandas","sqlalchemy", "pyodbc", "pandas", "ftplib", "pywinauto", "xlsxwriter", "welcome_derto", "urllib"]
 
 def install_missing_packages(packages):
     for package in packages:
@@ -28,21 +25,17 @@ def install_missing_packages(packages):
 
 install_missing_packages(required_packages)
 
-
 import loginserviceanfia as als
 import welcome_derto # Simple welcome function, first try at uploading a module to PyPi
-# import azure.identity
+# import azure.identity Do I really need it? No.
 import pyodbc
 assert pyodbc
-# assert azure.identity
+# assert azure.identity Do I really need it? I think not.
 from sqlalchemy import create_engine, text
 import pandas as pd
 import shutil
 import urllib
 import os
-from threading import Thread
-from pywinauto import Desktop
-from pywinauto.keyboard import send_keys
 import datetime as dt
 from sqlalchemy.exc import OperationalError, DBAPIError
 import xlsxwriter
@@ -67,77 +60,6 @@ def login_row(lines, lookup_string):
     cleaned_line = target_line.strip().split(" ")[1]
     return cleaned_line
 
-def get_login_info_from_config(): # Get login info from config or create one.
-    config_file = "config.txt"
-    rebuild = False
-    while True:
-        if rebuild:
-            os.remove(config_file)
-        rebuild = False
-        if not os.path.exists(config_file):
-            username = input("Inserisci la tua mail di Microsoft: ")
-            password = input("Inserisci la tua password: ")
-            server = input("Inserisci il nome del server (es. sql-tuazienda-prod...): ")
-            database = input("Inserisci il nome del database a cui accedere (es. BuyAnalysis...): ")
-            ftp_server_address = input("Inserisci l'indirizzo del server FTP: ")
-            ftp_user = input("Inserisci il nome utente per il server FTP: ")
-            ftp_password = input("Inserisci la password per il server FTP: ")
-            with open(config_file, 'w') as file:
-                file.write("username: "+ username + "\n")
-                file.write("password: "+ password + "\n")
-                file.write("server: "+ server + "\n")
-                file.write("database: "+ database + "\n")
-                file.write("ftp_server_address: "+ ftp_server_address + "\n")
-                file.write("ftp_user: "+ ftp_user + "\n")
-                file.write("ftp_password: "+ ftp_password)
-            print(f"User e password salvati nel file {config_file}.")
-        else:
-            with open(config_file, 'r') as file:
-                lines = file.readlines()
-                if len(lines) != 7:
-                    print("Attenzione: il file di configurazione non è corretto. Reinserisci i tuoi dati.")
-                    rebuild = True
-                    continue
-                username = login_row(lines, "username:").strip()
-                password = login_row(lines, "password:").strip()
-                server = login_row(lines, "server:").strip()
-                database = login_row(lines, "database:").strip()
-                ftp_server_address = login_row(lines, "ftp_server_address:").strip()
-                ftp_user = login_row(lines, "ftp_user:").strip()
-                ftp_password = login_row(lines, "ftp_password:").strip()
-                return username, password, server, database, ftp_server_address, ftp_user, ftp_password
-
-def simulate_user_login(user, password):
-    """
-    This function takes the result of the previous function and automatically performs the login procedure for Microsoft-based applications.
-    
-    Parameters
-    ----------
-    Parameters are passed by the function get_login_info_from_config().
-    """
-    try:
-        
-        time.sleep(3.5)
-        app = Desktop(backend='win32').window(title_re=".*autenticaz.*", visible_only=False)
-        dlg = app
-        dlg.set_focus()
-        move_window_to_primary_monitor(dlg)
-        time.sleep(3)
-        send_keys(user)
-        send_keys('{ENTER}{TAB}{ENTER}', with_spaces=True)
-        time.sleep(2)
-
-        if dlg.wait('ready', timeout=10):
-            send_keys(password)
-            send_keys('{ENTER}') 
-            print("Login completato.")
-        else:
-            print("Login completato. La password non è stata necessaria.")
-            pass
-        
-    except Exception as e:
-        print(f"Errore durante la simulazione del login: {e}. Il login è stato effettuato? Allora non preoccuparti, questo messaggio è normale.")
-        print(f"Errore di tipo: {type(e).__name__}")
 def convert_csv_to_xlsx(csv_file, xlsx_file, output_folder): 
     """
     This function transforms the .csv, resulting from the SQLalchemy query, into an .xlsx 
@@ -228,6 +150,8 @@ def verify_df_pairs(df, make_col="MARCA", model_col="MODELLO"):
             ('CITROEN', 'DOBLÒ'): ('CITROEN', 'JUMPER'),
             ('RENAULT', 'SPRINTER'): ('RENAULT', 'MASTER'),
             ('FIAT', 'BERLINGO'): ('FIAT', 'DOBLÒ'),
+            ('FORD', 'TRANSPORTER'): ('VOLKSWAGEN', 'TRANSPORTER'),
+            ('CITROEN', 'DUCATO'): ('FIAT', 'DUCATO'),
             ('DS', 'ND'): ('DS', 'DS7')
         }
     
@@ -548,33 +472,17 @@ AND omm.codice_omologazione IS NOT NULL
 
 # Date variables to properly select the correct queries
 
-
-
-# Connection data
-user, password, server, database, *rest = als.get_login_info_from_config()
-SERVER = server
-DATABASE = database
-
-connection_string = (
-    "mssql+pyodbc:///?odbc_connect="
-    + urllib.parse.quote_plus(
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-        f"SERVER={SERVER};"
-        f"DATABASE={DATABASE};"
-        "Authentication=ActiveDirectoryInteractive"
-    )
-)
-
 # ftp = ftplib.FTP(ftp_server_address)
 # ftp.login(ftp_user, ftp_password)
 
 # Extract correct data based on current date: if current month is 1 or 2, then data from previous year
 # must still be updated.
 try:
-    auth_thread = Thread(target=als.simulate_user_login, args=(user, password))
-    auth_thread.start()
 
-    engine = create_engine(connection_string)
+    connection_string = als.build_connection_string()
+
+
+    engine = create_engine(connection_string)     
     with engine.connect() as connection:
         if current_month <= 3:
             hy1 = pd.DataFrame(connection.execute(text(query_hy1)).fetchall())
