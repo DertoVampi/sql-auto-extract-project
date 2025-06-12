@@ -1,4 +1,7 @@
-c.dimartino@anfiait.onmicrosoft.com
-A1029384756b!
-sql-anfia-bi-prod.database.windows.net
-DealerAnalysis
+username: c.dimartino@anfiait.onmicrosoft.com
+password: A1029384756b!
+server: sql-anfia-bi-prod.database.windows.net
+database: DealerAnalysis
+ftp_server_address: 192.168.34.4
+ftp_user: dati_dr
+ftp_password: SlQwRlZTd0F0OQ==
