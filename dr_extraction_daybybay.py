@@ -6,7 +6,7 @@ start_time = time.time()
 import sys
 import subprocess
 # Install packages if missing, useful with pyinstaller and making .exes
-required_packages = ["loginserviceanfia","azure.identity", "pandas","sqlalchemy", "pyodbc", "pandas", "ftplib", "pywinauto", "xlsxwriter", "welcome_derto", "urllib"]
+required_packages = ["loginserviceanfia", "pandas","sqlalchemy", "pyodbc", "ftplib", "xlsxwriter", "welcome_derto"]
 
 def install_missing_packages(packages):
     for package in packages:
@@ -27,17 +27,14 @@ install_missing_packages(required_packages)
 
 import loginserviceanfia as als
 import welcome_derto # Simple welcome function, first try at uploading a module to PyPi
-# import azure.identity Do I really need it? No.
 import pyodbc
 assert pyodbc
-# assert azure.identity Do I really need it? I think not.
 from sqlalchemy import create_engine, text
 import pandas as pd
 import shutil
-import urllib
 import os
 import datetime as dt
-from sqlalchemy.exc import OperationalError, DBAPIError
+from sqlalchemy.exc import DBAPIError
 import xlsxwriter
 import json
 import ftplib
@@ -81,7 +78,6 @@ def convert_csv_to_xlsx(csv_file, xlsx_file, output_folder):
         'valign': 'vcenter'
     })
 
-    # Apri il file CSV e scrivi riga per riga
     with open(csv_file, "r", encoding="utf-8") as f:
         for row_idx, line in enumerate(f):
             for col_idx, cell_value in enumerate(line.strip().split(",")):
@@ -470,15 +466,16 @@ AND omm.codice_omologazione IS NOT NULL
 # AND codDirettivaCee IS NOT NULL AND IS IN ['EURO6D', 'EURO6E', 'EURO6C', 'EURO6B', 'EURO6A', 'EURO6', 'EURO0']
 # CASE WHEN anno_prima_immatricolazione IS NULL OR anno_prima_immatricolazione = anno_immatricolazione THEN flNuovo = 1 END
 
-# Date variables to properly select the correct queries
-
-# ftp = ftplib.FTP(ftp_server_address)
-# ftp.login(ftp_user, ftp_password)
+username, password, server, database, ftp_server_address, ftp_user, ftp_password, *rest = als.get_login_info_from_config()
 
 # Extract correct data based on current date: if current month is 1 or 2, then data from previous year
 # must still be updated.
 try:
-
+    
+    
+    ftp = ftplib.FTP(timeout=300)
+    ftp.connect(ftp_server_address, 21)
+    ftp.login(ftp_user, ftp_password)
     connection_string = als.build_connection_string()
 
 
@@ -511,30 +508,31 @@ try:
             verify_df_pairs(hy1)
             hy1.to_csv(f"{current_year}_HY1.csv", index=False, encoding='utf-8')
             convert_csv_to_xlsx(f"{current_year}_HY1.csv", f"{current_year}_HY1.xlsx", output_folder)
-            # file_hy1 = fr"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\{current_year}_HY1.xlsx"
-            # with open(file_hy1, "rb") as file:
-            #     ftp.storbinary(f"STOR {file_hy1}", file)
+            file_hy1 = fr"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\{current_year}_HY1.xlsx"
+            ftp.delete(f"{current_year}_HY1.xlsx")
+            with open(file_hy1, "rb") as file:
+                ftp.storbinary("STOR {}".format(f"{current_year}_HY1.xlsx"), file)
         if not hy2.empty:
             hy2_filename = f"{previous_year}_HY2.xlsx" if current_month in [1, 2, 3] else f"{current_year}_HY2.xlsx"
             hy2 = verify_df_pairs(hy2)
             hy2.to_csv(f"{previous_year}_HY2.csv" if current_month in [1, 2, 3] else f"{current_year}_HY2.csv", index=False, encoding='utf-8')            
             convert_csv_to_xlsx(f"{previous_year}_HY2.csv" if current_month in [1, 2, 3] else f"{current_year}_HY2.csv", hy2_filename, output_folder)
-            # file_hy2 = fr"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\{previous_year}_HY2.xlsx" if current_month in [1, 2, 3] else fr"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\{current_year}_HY2.xlsx"
-            # with open(file_hy2, "rb") as file:
-            #     ftp.storbinary(f"STOR {file_hy2}", file)
+            file_hy2 = fr"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\{previous_year}_HY2.xlsx" if current_month in [1, 2, 3] else fr"L:\03.Articoli_Analisi_(exUtenti)\Day-by-day\{current_year}_HY2.xlsx"
+            ftp.delete(f"{current_year}_HY2.xlsx")
+            with open(file_hy2, "rb") as file:
+                ftp.storbinary("STOR {}".format(f"{current_year}_HY2.xlsx"), file)
 
 except DBAPIError as e:
     user_input = "a"
-    # while user_input.casefold() not in ["y", "n"]:
-    #     user_input = input("C'è stato un errore nel login. Vuoi ricreare il file config.txt? y/n")
-    # if user_input.casefold == "y": 
-    #     os.remove("config.txt")
-    # else:
-    #     print(e)
-    
-
-# ftp.quit()
+    while user_input.casefold() not in ["y", "n"]:
+        user_input = input("C'è stato un errore nel login. Vuoi ricreare il file config.txt? y/n")
+    if user_input.casefold == "y": 
+        os.remove("config.txt")
+    else:
+        print(e)
+ 
 
 end_time = time.time()
 elapsed_time = end_time - start_time
+ftp.quit()
 print(f"Tempo totale: {elapsed_time:.2f} secondi ({elapsed_time / 60:.2f} minuti). Brum brum!")
